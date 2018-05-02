@@ -1,4 +1,5 @@
 import pandas as pd 
+import lightgbm as lgbm
 from scipy import sparse as ssp 
 import numpy as np
 from sklearn.cross_validation import train_test_split
@@ -10,27 +11,41 @@ test=pd.read_csv('/opt/data/test.csv')
 train_label=train['is_attributed']
 feature_names=['app','device','os','channel']
 X=train[feature_names]
-X_test=test[feature_names]
 for c in feature_names:
 	le=LabelEncoder()
-	le.fit(pd.concat([X,X_test])[c])
-	X[c]=le.transform(X[c])
-	X_test[c]=le.transform(X_test[c])
+	le.fit(train[c])
+	train[c]=le.transform(train[c])
 
 enc=OneHotEncoder()
-enc.fit(pd.concat([X,X_test]))
-X=enc.transform(X)
-X_test=enc.transform(X_test)
+enc.fit(train[feature_names])
+X=enc.transform(train[c])
 for c in feature_names:
 	d=train[c].value_counts().to_dict()
 	train[c+"_count"]=train[c].apply(lambda x:d.get(x))
-	dd=test[c].value_counts().to_dict()
-	test[c+"_count"]=test[c].apply(lambda x:dd.get(x))
 count_features=[c for c in train.columns.tolist() if ("count" in c)]
 X=ssp.hstack(train[count_features].values,X).tocsr()
-X_test=ssp.hstack(test[count_features].values,X_test)
 XX_train, XX_test, y_train, y_test = train_test_split(X,train_label)
-xgb_val=xgb.DMatrix(XX_test,y_test)
-xgb_train=xgb.DMatrix(XX_train,y_train)
-xgb_test=xgb.DMatrix(X_test)
-
+dtrain=lgbm.Dataset(XX_train,y_train)
+dvalid=lgbm.Dataset(XX_test,y_test,reference=xgb_train)
+learning_rate = 0.1
+num_leaves = 15
+min_data_in_leaf = 2000
+feature_fraction = 0.6
+num_boost_round = 10000
+params = {"objective": "binary",
+          "boosting_type": "gbdt",
+          "learning_rate": learning_rate,
+          "num_leaves": num_leaves,
+           "max_bin": 256,
+          "feature_fraction": feature_fraction,
+          "verbosity": 0,
+          "drop_rate": 0.1,
+          "is_unbalance": False,
+          "max_drop": 50,
+          "min_child_samples": 10,
+          "min_child_weight": 150,
+          "min_split_gain": 0,
+          "subsample": 0.9
+          }
+bst = lgbm.train(params, dtrain, num_boost_round, valid_sets=dvalid, verbose_eval=100,early_stopping_rounds=100)
+model=bst.save_model('/opt/lgb_model.txt')
