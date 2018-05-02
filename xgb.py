@@ -9,21 +9,27 @@ from sklearn.preprocessing import OneHotEncoder
 train=pd.read_csv('/opt/split/xaa')
 test=pd.read_csv('/opt/data/test.csv')
 train_label=train['is_attributed']
+train_test=pd.concat([train,test])
 feature_names=['app','device','os','channel']
 X=train[feature_names]
 for c in feature_names:
 	le=LabelEncoder()
-	le.fit(train[c])
+	le.fit(train_test[c])
 	train[c]=le.transform(train[c])
+	test[c]=le.transform(test[c])
 
 enc=OneHotEncoder()
-enc.fit(train[feature_names])
-X=enc.transform(train[c])
+enc.fit(train_test[feature_names])
+X=enc.transform(train[feature_names])
+X_test=enc.transform(test[feature_names])
 for c in feature_names:
 	d=train[c].value_counts().to_dict()
 	train[c+"_count"]=train[c].apply(lambda x:d.get(x))
+	dd=test[c].value_counts().to_dict()
+	test[c+"_count"]=test[c].apply(lambda x:d.get(x))
 count_features=[c for c in train.columns.tolist() if ("count" in c)]
 X=ssp.hstack(train[count_features].values,X).tocsr()
+X_test=ssp.hstack(test[count_features].values,X_test).tocsr()
 XX_train, XX_test, y_train, y_test = train_test_split(X,train_label)
 dtrain=lgbm.Dataset(XX_train,y_train)
 dvalid=lgbm.Dataset(XX_test,y_test,reference=xgb_train)
@@ -48,4 +54,5 @@ params = {"objective": "binary",
           "subsample": 0.9
           }
 bst = lgbm.train(params, dtrain, num_boost_round, valid_sets=dvalid, verbose_eval=100,early_stopping_rounds=100)
-model=bst.save_model('/opt/lgb_model.txt')
+preds=bst.predict(X_test,num_iteration=bst.best_iteration)
+
