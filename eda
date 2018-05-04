@@ -1,0 +1,14 @@
+import pandas as pd
+import matpotlib.pyplot as plt
+data=pd.read_csv('/opt/data/xaa')
+app_id=set(data['app'].tolist())
+app_times=[]
+app_ratio=[]
+for i in app_id:
+	d=data[data['app']==i].is_attributed.value_counts().tolist()
+	if len(d)>1:
+		times.append(data[data['app']==i].shape[0])
+		ratio.append(d[1]/(d[0]+d[1]))
+
+plt.scatter(app_times,app_ratio)
+plt.show()
